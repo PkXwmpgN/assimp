@@ -2,7 +2,9 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2019, assimp team
+
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -40,8 +42,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /** @file  AssxmlExporter.cpp
  *  ASSXML exporter main code
  */
+
+#ifndef ASSIMP_BUILD_NO_EXPORT
+#ifndef ASSIMP_BUILD_NO_ASSXML_EXPORTER
+
 #include <stdarg.h>
-#include "./../include/assimp/version.h"
+#include <assimp/version.h>
 #include "ProcessHelper.h"
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
@@ -56,9 +62,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <time.h>
 #include <stdio.h>
 
-#ifndef ASSIMP_BUILD_NO_EXPORT
-#ifndef ASSIMP_BUILD_NO_ASSXML_EXPORTER
-
 using namespace Assimp;
 
 namespace Assimp    {
@@ -72,7 +75,7 @@ static int ioprintf( IOStream * io, const char *format, ... ) {
         return -1;
     }
 
-    static const size_t Size = 4096;
+    static const int Size = 4096;
     char sz[ Size ];
     ::memset( sz, '\0', Size );
     va_list va;
@@ -630,7 +633,7 @@ void WriteDump(const aiScene* scene, IOStream* io, bool shortened) {
 
 } // end of namespace AssxmlExport
 
-void ExportSceneAssxml(const char* pFile, IOSystem* pIOSystem, const aiScene* pScene, const ExportProperties* pProperties)
+void ExportSceneAssxml(const char* pFile, IOSystem* pIOSystem, const aiScene* pScene, const ExportProperties* /*pProperties*/)
 {
     IOStream * out = pIOSystem->Open( pFile, "wt" );
     if (!out) return;

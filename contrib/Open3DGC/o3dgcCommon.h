@@ -376,14 +376,14 @@ namespace o3dgc
 
         if (quantMode == O3DGC_SC3DMC_DIAG_BB)
         {
-            Real diag = 0.0;
+            Real diag = Real( 0.0 );
             Real r;
             for(unsigned long d = 0; d < dim; ++d)
             {
                 r     = (maxTab[d] - minTab[d]);
                 diag += r*r;
             } 
-            diag = sqrt(diag);
+            diag = static_cast<Real>(sqrt(diag));
             for(unsigned long d = 0; d < dim; ++d)
             {
                  maxTab[d] = minTab[d] + diag;

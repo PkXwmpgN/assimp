@@ -2,7 +2,9 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2019, assimp team
+
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -48,7 +50,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "X3DImporter_Macro.hpp"
 
 // Header files, Assimp.
-#include "StandardShapes.h"
+#include <assimp/StandardShapes.h>
 
 namespace Assimp
 {
@@ -134,7 +136,7 @@ void X3DImporter::ParseNode_Geometry3D_Cone()
 	}
 	else
 	{
-		const unsigned int tess = 30;///TODO: IME tesselation factor thru ai_property
+		const unsigned int tess = 30;///TODO: IME tessellation factor through ai_property
 
 		std::vector<aiVector3D> tvec;// temp array for vertices.
 
@@ -207,7 +209,7 @@ void X3DImporter::ParseNode_Geometry3D_Cylinder()
 	}
 	else
 	{
-		const unsigned int tess = 30;///TODO: IME tesselation factor thru ai_property
+		const unsigned int tess = 30;///TODO: IME tessellation factor through ai_property
 
 		std::vector<aiVector3D> tside;// temp array for vertices of side.
 		std::vector<aiVector3D> tcir;// temp array for vertices of circle.
@@ -284,7 +286,7 @@ void X3DImporter::ParseNode_Geometry3D_ElevationGrid()
     bool ccw = true;
     bool colorPerVertex = true;
     float creaseAngle = 0;
-    std::list<float> height;
+    std::vector<float> height;
     bool normalPerVertex = true;
     bool solid = true;
     int32_t xDimension = 0;
@@ -300,7 +302,7 @@ void X3DImporter::ParseNode_Geometry3D_ElevationGrid()
 		MACRO_ATTRREAD_CHECK_RET("colorPerVertex", colorPerVertex, XML_ReadNode_GetAttrVal_AsBool);
 		MACRO_ATTRREAD_CHECK_RET("normalPerVertex", normalPerVertex, XML_ReadNode_GetAttrVal_AsBool);
 		MACRO_ATTRREAD_CHECK_RET("creaseAngle", creaseAngle, XML_ReadNode_GetAttrVal_AsFloat);
-		MACRO_ATTRREAD_CHECK_REF("height", height, XML_ReadNode_GetAttrVal_AsListF);
+		MACRO_ATTRREAD_CHECK_REF("height", height, XML_ReadNode_GetAttrVal_AsArrF);
 		MACRO_ATTRREAD_CHECK_RET("xDimension", xDimension, XML_ReadNode_GetAttrVal_AsI32);
 		MACRO_ATTRREAD_CHECK_RET("xSpacing", xSpacing, XML_ReadNode_GetAttrVal_AsFloat);
 		MACRO_ATTRREAD_CHECK_RET("zDimension", zDimension, XML_ReadNode_GetAttrVal_AsI32);
@@ -325,7 +327,7 @@ void X3DImporter::ParseNode_Geometry3D_ElevationGrid()
 		CX3DImporter_NodeElement_ElevationGrid& grid_alias = *((CX3DImporter_NodeElement_ElevationGrid*)ne);// create alias for conveience
 
 		{// create grid vertices list
-			std::list<float>::const_iterator he_it = height.begin();
+			std::vector<float>::const_iterator he_it = height.begin();
 
 			for(int32_t zi = 0; zi < zDimension; zi++)// rows
 			{
@@ -347,8 +349,8 @@ void X3DImporter::ParseNode_Geometry3D_ElevationGrid()
 			((CX3DImporter_NodeElement_ElevationGrid*)ne)->NumIndices = 2;// will be holded as line set.
 			for(size_t i = 0, i_e = (grid_alias.Vertices.size() - 1); i < i_e; i++)
 			{
-				grid_alias.CoordIdx.push_back(i);
-				grid_alias.CoordIdx.push_back(i + 1);
+				grid_alias.CoordIdx.push_back(static_cast<int32_t>(i));
+				grid_alias.CoordIdx.push_back(static_cast<int32_t>(i + 1));
 				grid_alias.CoordIdx.push_back(-1);
 			}
 		}
@@ -467,7 +469,7 @@ static aiVector3D GeometryHelper_Extrusion_GetNextY(const size_t pSpine_PointIdx
 	if((pSpine_PointIdx == 0) || (pSpine_PointIdx == spine_idx_last))// at first special cases
 	{
 		if(pSpine_Closed)
-		{// If the spine curve is closed: The SCP for the first and last points is the same and is found using (spine[1] − spine[n − 2]) to compute the Y-axis.
+		{// If the spine curve is closed: The SCP for the first and last points is the same and is found using (spine[1] - spine[n - 2]) to compute the Y-axis.
 			// As we even for closed spine curve last and first point in pSpine are not the same: duplicates(spine[n - 1] which are equivalent to spine[0])
 			// in tail are removed.
 			// So, last point in pSpine is a spine[n - 2]
@@ -478,13 +480,13 @@ static aiVector3D GeometryHelper_Extrusion_GetNextY(const size_t pSpine_PointIdx
 			tvec = pSpine[1] - pSpine[0];
 		}
 		else
-		{// The Y-axis used for the last point it is the vector from spine[n−2] to spine[n−1]. In our case(see above about droping tail) spine[n - 1] is
+		{// The Y-axis used for the last point it is the vector from spine[n-2] to spine[n-1]. In our case(see above about dropping tail) spine[n - 1] is
 			// the spine[0].
 			tvec = pSpine[spine_idx_last] - pSpine[spine_idx_last - 1];
 		}
 	}// if((pSpine_PointIdx == 0) || (pSpine_PointIdx == spine_idx_last))
 	else
-	{// For all points other than the first or last: The Y-axis for spine[i] is found by normalizing the vector defined by (spine[i+1] − spine[i−1]).
+	{// For all points other than the first or last: The Y-axis for spine[i] is found by normalizing the vector defined by (spine[i+1] - spine[i-1]).
 		tvec = pSpine[pSpine_PointIdx + 1] - pSpine[pSpine_PointIdx - 1];
 	}// if((pSpine_PointIdx == 0) || (pSpine_PointIdx == spine_idx_last)) else
 
@@ -516,7 +518,7 @@ static aiVector3D GeometryHelper_Extrusion_GetNextZ(const size_t pSpine_PointIdx
 
 			// As said: "If the Z-axis of the first point is undefined (because the spine is not closed and the first two spine segments are collinear)
 			// then the Z-axis for the first spine point with a defined Z-axis is used."
-			// Walk thru spine and find Z.
+			// Walk through spine and find Z.
 			for(size_t next_point = 2; (next_point <= spine_idx_last) && !found; next_point++)
 			{
 				// (pSpine[2] - pSpine[1]) ^ (pSpine[0] - pSpine[1])
@@ -549,7 +551,7 @@ static aiVector3D GeometryHelper_Extrusion_GetNextZ(const size_t pSpine_PointIdx
 	}
 
 	// After determining the Z-axis, its dot product with the Z-axis of the previous spine point is computed. If this value is negative, the Z-axis
-	// is flipped (multiplied by −1).
+	// is flipped (multiplied by -1).
 	if((tvec * pVecZ_Prev) < 0) tvec = -tvec;
 
 	return tvec.Normalize();
@@ -679,7 +681,7 @@ void X3DImporter::ParseNode_Geometry3D_Extrusion()
 		// How we done it at all?
 		// 1. At first we will calculate array of basises for every point in spine(look SCP in ISO-dic). Also "orientation" vector
 		// are applied vor every basis.
-		// 2. After that we can create array of point sets: which are scaled, transfered to basis of relative basis and at final translated to real position
+		// 2. After that we can create array of point sets: which are scaled, transferred to basis of relative basis and at final translated to real position
 		// using relative spine point.
 		// 3. Next step is creating CoordIdx array(do not forget "-1" delimiter). While creating CoordIdx also created faces for begin and end caps, if
 		// needed. While createing CootdIdx is taking in account CCW flag.
@@ -749,7 +751,7 @@ void X3DImporter::ParseNode_Geometry3D_Extrusion()
 					tcross[cri] = tvecX + tvecY + tvecZ + spine[spi];
 				}// for(size_t cri = 0, cri_e = crossSection.size(); cri < cri_e; i++)
 
-				pointset_arr[spi] = tcross;// store transfered point set
+				pointset_arr[spi] = tcross;// store transferred point set
 			}// for(size_t spi = 0, spi_e = spine.size(); spi < spi_e; i++)
 		}// END: 2. Create array of point sets.
 
@@ -758,7 +760,7 @@ void X3DImporter::ParseNode_Geometry3D_Extrusion()
 			if(beginCap)
 			{
 				// add cap as polygon. vertices of cap are places at begin, so just add numbers from zero.
-				for(size_t i = 0, i_e = crossSection.size(); i < i_e; i++) ext_alias.CoordIndex.push_back(i);
+				for(size_t i = 0, i_e = crossSection.size(); i < i_e; i++) ext_alias.CoordIndex.push_back(static_cast<int32_t>(i));
 
 				// add delimiter
 				ext_alias.CoordIndex.push_back(-1);
@@ -769,7 +771,7 @@ void X3DImporter::ParseNode_Geometry3D_Extrusion()
 				// add cap as polygon. vertices of cap are places at end, as for beginCap use just sequence of numbers but with offset.
 				size_t beg = (pointset_arr.size() - 1) * crossSection.size();
 
-				for(size_t i = beg, i_e = (beg + crossSection.size()); i < i_e; i++) ext_alias.CoordIndex.push_back(i);
+				for(size_t i = beg, i_e = (beg + crossSection.size()); i < i_e; i++) ext_alias.CoordIndex.push_back(static_cast<int32_t>(i));
 
 				// add delimiter
 				ext_alias.CoordIndex.push_back(-1);
@@ -795,14 +797,20 @@ void X3DImporter::ParseNode_Geometry3D_Extrusion()
 					if(cri != cr_last)
 					{
 						MACRO_FACE_ADD_QUAD(ccw, ext_alias.CoordIndex,
-											spi * cr_sz + cri, right_col * cr_sz + cri, right_col * cr_sz + cri + 1, spi * cr_sz + cri + 1);
+											static_cast<int32_t>(spi * cr_sz + cri), 
+                                            static_cast<int32_t>(right_col * cr_sz + cri), 
+                                            static_cast<int32_t>(right_col * cr_sz + cri + 1), 
+                                            static_cast<int32_t>(spi * cr_sz + cri + 1));
 						// add delimiter
 						ext_alias.CoordIndex.push_back(-1);
 					}
 					else if(cross_closed)// if cross curve is closed then one more quad is needed: between first and last points of curve.
 					{
 						MACRO_FACE_ADD_QUAD(ccw, ext_alias.CoordIndex,
-											spi * cr_sz + cri, right_col * cr_sz + cri, right_col * cr_sz + 0, spi * cr_sz + 0);
+                                            static_cast<int32_t>(spi * cr_sz + cri), 
+                                            static_cast<int32_t>(right_col * cr_sz + cri), 
+                                            static_cast<int32_t>(right_col * cr_sz + 0), 
+                                            static_cast<int32_t>(spi * cr_sz + 0));
 						// add delimiter
 						ext_alias.CoordIndex.push_back(-1);
 					}
@@ -856,29 +864,29 @@ void X3DImporter::ParseNode_Geometry3D_IndexedFaceSet()
 {
     std::string use, def;
     bool ccw = true;
-    std::list<int32_t> colorIndex;
+    std::vector<int32_t> colorIndex;
     bool colorPerVertex = true;
     bool convex = true;
-    std::list<int32_t> coordIndex;
+    std::vector<int32_t> coordIndex;
     float creaseAngle = 0;
-    std::list<int32_t> normalIndex;
+    std::vector<int32_t> normalIndex;
     bool normalPerVertex = true;
     bool solid = true;
-    std::list<int32_t> texCoordIndex;
+    std::vector<int32_t> texCoordIndex;
     CX3DImporter_NodeElement* ne( nullptr );
 
 	MACRO_ATTRREAD_LOOPBEG;
 		MACRO_ATTRREAD_CHECKUSEDEF_RET(def, use);
 		MACRO_ATTRREAD_CHECK_RET("ccw", ccw, XML_ReadNode_GetAttrVal_AsBool);
-		MACRO_ATTRREAD_CHECK_REF("colorIndex", colorIndex, XML_ReadNode_GetAttrVal_AsListI32);
+		MACRO_ATTRREAD_CHECK_REF("colorIndex", colorIndex, XML_ReadNode_GetAttrVal_AsArrI32);
 		MACRO_ATTRREAD_CHECK_RET("colorPerVertex", colorPerVertex, XML_ReadNode_GetAttrVal_AsBool);
 		MACRO_ATTRREAD_CHECK_RET("convex", convex, XML_ReadNode_GetAttrVal_AsBool);
-		MACRO_ATTRREAD_CHECK_REF("coordIndex", coordIndex, XML_ReadNode_GetAttrVal_AsListI32);
+		MACRO_ATTRREAD_CHECK_REF("coordIndex", coordIndex, XML_ReadNode_GetAttrVal_AsArrI32);
 		MACRO_ATTRREAD_CHECK_RET("creaseAngle", creaseAngle, XML_ReadNode_GetAttrVal_AsFloat);
-		MACRO_ATTRREAD_CHECK_REF("normalIndex", normalIndex, XML_ReadNode_GetAttrVal_AsListI32);
+		MACRO_ATTRREAD_CHECK_REF("normalIndex", normalIndex, XML_ReadNode_GetAttrVal_AsArrI32);
 		MACRO_ATTRREAD_CHECK_RET("normalPerVertex", normalPerVertex, XML_ReadNode_GetAttrVal_AsBool);
 		MACRO_ATTRREAD_CHECK_RET("solid", solid, XML_ReadNode_GetAttrVal_AsBool);
-		MACRO_ATTRREAD_CHECK_REF("texCoordIndex", texCoordIndex, XML_ReadNode_GetAttrVal_AsListI32);
+		MACRO_ATTRREAD_CHECK_REF("texCoordIndex", texCoordIndex, XML_ReadNode_GetAttrVal_AsArrI32);
 	MACRO_ATTRREAD_LOOPEND;
 
 	// if "USE" defined then find already defined element.
@@ -942,7 +950,7 @@ void X3DImporter::ParseNode_Geometry3D_IndexedFaceSet()
 void X3DImporter::ParseNode_Geometry3D_Sphere()
 {
     std::string use, def;
-    float radius = 1;
+    ai_real radius = 1;
     bool solid = true;
     CX3DImporter_NodeElement* ne( nullptr );
 
@@ -959,7 +967,7 @@ void X3DImporter::ParseNode_Geometry3D_Sphere()
 	}
 	else
 	{
-		const unsigned int tess = 3;///TODO: IME tesselation factor thru ai_property
+		const unsigned int tess = 3;///TODO: IME tessellation factor through ai_property
 
 		std::vector<aiVector3D> tlist;
 

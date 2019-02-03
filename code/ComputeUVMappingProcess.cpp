@@ -2,7 +2,9 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2019, assimp team
+
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -43,7 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "ComputeUVMappingProcess.h"
 #include "ProcessHelper.h"
-#include "Exceptional.h"
+#include <assimp/Exceptional.h>
 
 using namespace Assimp;
 
@@ -52,7 +54,7 @@ namespace {
     const static aiVector3D base_axis_y(0.0,1.0,0.0);
     const static aiVector3D base_axis_x(1.0,0.0,0.0);
     const static aiVector3D base_axis_z(0.0,0.0,1.0);
-    const static ai_real angle_epsilon = 0.95;
+    const static ai_real angle_epsilon = ai_real( 0.95 );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -97,7 +99,7 @@ inline unsigned int FindEmptyUVChannel (aiMesh* mesh)
     for (unsigned int m = 0; m < AI_MAX_NUMBER_OF_TEXTURECOORDS;++m)
         if (!mesh->mTextureCoords[m])return m;
 
-    DefaultLogger::get()->error("Unable to compute UV coordinates, no free UV slot found");
+    ASSIMP_LOG_ERROR("Unable to compute UV coordinates, no free UV slot found");
     return UINT_MAX;
 }
 
@@ -109,11 +111,11 @@ void RemoveUVSeams (aiMesh* mesh, aiVector3D* out)
     // much easier, but I don't know how and am currently too tired to
     // to think about a better solution.
 
-    const static ai_real LOWER_LIMIT = 0.1;
-    const static ai_real UPPER_LIMIT = 0.9;
+    const static ai_real LOWER_LIMIT = ai_real( 0.1 );
+    const static ai_real UPPER_LIMIT = ai_real( 0.9 );
 
-    const static ai_real LOWER_EPSILON = 10e-3;
-    const static ai_real UPPER_EPSILON = 1.0-10e-3;
+    const static ai_real LOWER_EPSILON = ai_real( 10e-3 );
+    const static ai_real UPPER_EPSILON = ai_real( 1.0-10e-3 );
 
     for (unsigned int fidx = 0; fidx < mesh->mNumFaces;++fidx)
     {
@@ -382,13 +384,13 @@ void ComputeUVMappingProcess::ComputePlaneMapping(aiMesh* mesh,const aiVector3D&
 // ------------------------------------------------------------------------------------------------
 void ComputeUVMappingProcess::ComputeBoxMapping( aiMesh*, aiVector3D* )
 {
-    DefaultLogger::get()->error("Mapping type currently not implemented");
+    ASSIMP_LOG_ERROR("Mapping type currently not implemented");
 }
 
 // ------------------------------------------------------------------------------------------------
 void ComputeUVMappingProcess::Execute( aiScene* pScene)
 {
-    DefaultLogger::get()->debug("GenUVCoordsProcess begin");
+    ASSIMP_LOG_DEBUG("GenUVCoordsProcess begin");
     char buffer[1024];
 
     if (pScene->mFlags & AI_SCENE_FLAGS_NON_VERBOSE_FORMAT)
@@ -416,7 +418,7 @@ void ComputeUVMappingProcess::Execute( aiScene* pScene)
                             TextureTypeToString((aiTextureType)prop->mSemantic),prop->mIndex,
                             MappingTypeToString(mapping));
 
-                        DefaultLogger::get()->info(buffer);
+                        ASSIMP_LOG_INFO(buffer);
                     }
 
                     if (aiTextureMapping_OTHER == mapping)
@@ -483,7 +485,7 @@ void ComputeUVMappingProcess::Execute( aiScene* pScene)
                             }
                             if (m && idx != outIdx)
                             {
-                                DefaultLogger::get()->warn("UV index mismatch. Not all meshes assigned to "
+                                ASSIMP_LOG_WARN("UV index mismatch. Not all meshes assigned to "
                                     "this material have equal numbers of UV channels. The UV index stored in  "
                                     "the material structure does therefore not apply for all meshes. ");
                             }
@@ -500,5 +502,5 @@ void ComputeUVMappingProcess::Execute( aiScene* pScene)
             }
         }
     }
-    DefaultLogger::get()->debug("GenUVCoordsProcess finished");
+    ASSIMP_LOG_DEBUG("GenUVCoordsProcess finished");
 }

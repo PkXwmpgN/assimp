@@ -2,7 +2,9 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2019, assimp team
+
+
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -37,28 +39,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------
 */
-
-
-
 #ifndef ASSIMP_BUILD_NO_EXPORT
 #ifndef ASSIMP_BUILD_NO_GLTF_EXPORTER
 
 #include "glTFExporter.h"
 
-#include "Exceptional.h"
-#include "StringComparison.h"
-#include "ByteSwapper.h"
+#include <assimp/Exceptional.h>
+#include <assimp/StringComparison.h>
+#include <assimp/ByteSwapper.h>
 
 #include "SplitLargeMeshes.h"
-#include "SceneCombiner.h"
 
+#include <assimp/SceneCombiner.h>
 #include <assimp/version.h>
 #include <assimp/IOSystem.hpp>
 #include <assimp/Exporter.hpp>
 #include <assimp/material.h>
 #include <assimp/scene.h>
 
-// Header files, standart library.
+// Header files, standard library.
 #include <memory>
 #include <inttypes.h>
 
@@ -94,8 +93,6 @@ namespace Assimp {
 
 } // end of namespace Assimp
 
-
-
 glTFExporter::glTFExporter(const char* filename, IOSystem* pIOSystem, const aiScene* pScene,
                            const ExportProperties* pProperties, bool isBinary)
     : mFilename(filename)
@@ -104,19 +101,18 @@ glTFExporter::glTFExporter(const char* filename, IOSystem* pIOSystem, const aiSc
 {
     aiScene* sceneCopy_tmp;
     SceneCombiner::CopyScene(&sceneCopy_tmp, pScene);
-    std::unique_ptr<aiScene> sceneCopy(sceneCopy_tmp);
+    aiScene *sceneCopy(sceneCopy_tmp);
 
     SplitLargeMeshesProcess_Triangle tri_splitter;
     tri_splitter.SetLimit(0xffff);
-    tri_splitter.Execute(sceneCopy.get());
+    tri_splitter.Execute(sceneCopy);
 
     SplitLargeMeshesProcess_Vertex vert_splitter;
     vert_splitter.SetLimit(0xffff);
-    vert_splitter.Execute(sceneCopy.get());
+    vert_splitter.Execute(sceneCopy);
 
-    mScene = sceneCopy.get();
+    mScene = sceneCopy;
 
-    std::unique_ptr<Asset> asset();
     mAsset.reset( new glTF::Asset( pIOSystem ) );
 
     if (isBinary) {
@@ -190,8 +186,11 @@ inline Ref<Accessor> ExportData(Asset& a, std::string& meshName, Ref<Buffer>& bu
     unsigned int bytesPerComp = ComponentTypeSize(compType);
 
     size_t offset = buffer->byteLength;
+    // make sure offset is correctly byte-aligned, as required by spec
+    size_t padding = offset % bytesPerComp;
+    offset += padding;
     size_t length = count * numCompsOut * bytesPerComp;
-    buffer->Grow(length);
+    buffer->Grow(length + padding);
 
     // bufferView
     Ref<BufferView> bv = a.bufferViews.Create(a.FindUniqueID(meshName, "view"));
@@ -419,17 +418,18 @@ Ref<Node> FindSkeletonRootJoint(Ref<Skin>& skinRef)
     return parentNodeRef;
 }
 
-void ExportSkin(Asset& mAsset, const aiMesh* aim, Ref<Mesh>& meshRef, Ref<Buffer>& bufferRef, Ref<Skin>& skinRef, std::vector<aiMatrix4x4>& inverseBindMatricesData)
+void ExportSkin(Asset& mAsset, const aiMesh* aimesh, Ref<Mesh>& meshRef, Ref<Buffer>& bufferRef, Ref<Skin>& skinRef, std::vector<aiMatrix4x4>& inverseBindMatricesData)
 {
-    if (aim->mNumBones < 1) {
+    if (aimesh->mNumBones < 1) {
         return;
     }
 
     // Store the vertex joint and weight data.
-    vec4* vertexJointData = new vec4[aim->mNumVertices];
-    vec4* vertexWeightData = new vec4[aim->mNumVertices];
-    int* jointsPerVertex = new int[aim->mNumVertices];
-    for (size_t i = 0; i < aim->mNumVertices; ++i) {
+    const size_t NumVerts( aimesh->mNumVertices );
+    vec4* vertexJointData = new vec4[ NumVerts ];
+    vec4* vertexWeightData = new vec4[ NumVerts ];
+    int* jointsPerVertex = new int[ NumVerts ];
+    for (size_t i = 0; i < NumVerts; ++i) {
         jointsPerVertex[i] = 0;
         for (size_t j = 0; j < 4; ++j) {
             vertexJointData[i][j] = 0;
@@ -437,15 +437,15 @@ void ExportSkin(Asset& mAsset, const aiMesh* aim, Ref<Mesh>& meshRef, Ref<Buffer
         }
     }
 
-    for (unsigned int idx_bone = 0; idx_bone < aim->mNumBones; ++idx_bone) {
-        const aiBone* aib = aim->mBones[idx_bone];
+    for (unsigned int idx_bone = 0; idx_bone < aimesh->mNumBones; ++idx_bone) {
+        const aiBone* aib = aimesh->mBones[idx_bone];
 
         // aib->mName   =====>  skinRef->jointNames
         // Find the node with id = mName.
         Ref<Node> nodeRef = mAsset.nodes.Get(aib->mName.C_Str());
         nodeRef->jointName = nodeRef->id;
 
-        unsigned int jointNamesIndex;
+        unsigned int jointNamesIndex = 0;
         bool addJointToJointNames = true;
         for ( unsigned int idx_joint = 0; idx_joint < skinRef->jointNames.size(); ++idx_joint) {
             if (skinRef->jointNames[idx_joint]->jointName.compare(nodeRef->jointName) == 0) {
@@ -461,7 +461,7 @@ void ExportSkin(Asset& mAsset, const aiMesh* aim, Ref<Mesh>& meshRef, Ref<Buffer
             aiMatrix4x4 tmpMatrix4;
             CopyValue(aib->mOffsetMatrix, tmpMatrix4);
             inverseBindMatricesData.push_back(tmpMatrix4);
-            jointNamesIndex = inverseBindMatricesData.size() - 1;
+            jointNamesIndex = static_cast<unsigned int>(inverseBindMatricesData.size() - 1);
         }
 
         // aib->mWeights   =====>  vertexWeightData
@@ -470,9 +470,11 @@ void ExportSkin(Asset& mAsset, const aiMesh* aim, Ref<Mesh>& meshRef, Ref<Buffer
             float vertWeight      = aib->mWeights[idx_weights].mWeight;
 
             // A vertex can only have at most four joint weights. Ignore all others.
-            if (jointsPerVertex[vertexId] > 3) { continue; }
+            if (jointsPerVertex[vertexId] > 3) {
+                continue;
+            }
 
-            vertexJointData[vertexId][jointsPerVertex[vertexId]] = jointNamesIndex;
+            vertexJointData[vertexId][jointsPerVertex[vertexId]] = static_cast<float>(jointNamesIndex);
             vertexWeightData[vertexId][jointsPerVertex[vertexId]] = vertWeight;
 
             jointsPerVertex[vertexId] += 1;
@@ -481,11 +483,18 @@ void ExportSkin(Asset& mAsset, const aiMesh* aim, Ref<Mesh>& meshRef, Ref<Buffer
     } // End: for-loop mNumMeshes
 
     Mesh::Primitive& p = meshRef->primitives.back();
-    Ref<Accessor> vertexJointAccessor = ExportData(mAsset, skinRef->id, bufferRef, aim->mNumVertices, vertexJointData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
-    if (vertexJointAccessor) p.attributes.joint.push_back(vertexJointAccessor);
+    Ref<Accessor> vertexJointAccessor = ExportData(mAsset, skinRef->id, bufferRef, aimesh->mNumVertices, vertexJointData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
+    if ( vertexJointAccessor ) {
+        p.attributes.joint.push_back( vertexJointAccessor );
+    }
 
-    Ref<Accessor> vertexWeightAccessor = ExportData(mAsset, skinRef->id, bufferRef, aim->mNumVertices, vertexWeightData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
-    if (vertexWeightAccessor) p.attributes.weight.push_back(vertexWeightAccessor);
+    Ref<Accessor> vertexWeightAccessor = ExportData(mAsset, skinRef->id, bufferRef, aimesh->mNumVertices, vertexWeightData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
+    if ( vertexWeightAccessor ) {
+        p.attributes.weight.push_back( vertexWeightAccessor );
+    }
+    delete[] jointsPerVertex;
+    delete[] vertexWeightData;
+    delete[] vertexJointData;
 }
 
 void glTFExporter::ExportMeshes()
@@ -499,7 +508,7 @@ void glTFExporter::ExportMeshes()
 
     // Variables needed for compression. BEGIN.
     // Indices, not pointers - because pointer to buffer is changing while writing to it.
-    size_t idx_srcdata_begin;// Index of buffer before writing mesh data. Also, index of begin of coordinates array in buffer.
+    size_t idx_srcdata_begin = 0; // Index of buffer before writing mesh data. Also, index of begin of coordinates array in buffer.
     size_t idx_srcdata_normal = SIZE_MAX;// Index of begin of normals array in buffer. SIZE_MAX - mean that mesh has no normals.
     std::vector<size_t> idx_srcdata_tc;// Array of indices. Every index point to begin of texture coordinates array in buffer.
     size_t idx_srcdata_ind;// Index of begin of coordinates indices array in buffer.
@@ -507,7 +516,7 @@ void glTFExporter::ExportMeshes()
     // Variables needed for compression. END.
 
     std::string fname = std::string(mFilename);
-    std::string bufferIdPrefix = fname.substr(0, fname.find("."));
+    std::string bufferIdPrefix = fname.substr(0, fname.rfind(".gltf"));
     std::string bufferId = mAsset->FindUniqueID("", bufferIdPrefix.c_str());
 
     Ref<Buffer> b = mAsset->GetBodyBuffer();
@@ -559,7 +568,7 @@ void glTFExporter::ExportMeshes()
 			else
 				msg = "mesh must has vertices and faces.";
 
-			DefaultLogger::get()->warn("GLTF: can not use Open3DGC-compression: " + msg);
+            ASSIMP_LOG_WARN_F("GLTF: can not use Open3DGC-compression: ", msg);
             comp_allow = false;
 		}
 
@@ -578,7 +587,7 @@ void glTFExporter::ExportMeshes()
 		if (v) p.attributes.position.push_back(v);
 
 		/******************** Normals ********************/
-		if(comp_allow && (aim->mNormals > 0)) idx_srcdata_normal = b->byteLength;// Store index of normals array.
+		if(comp_allow && (aim->mNormals != 0)) idx_srcdata_normal = b->byteLength;// Store index of normals array.
 
 		Ref<Accessor> n = ExportData(*mAsset, meshId, b, aim->mNumVertices, aim->mNormals, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
 		if (n) p.attributes.normal.push_back(n);
@@ -682,19 +691,19 @@ void glTFExporter::ExportMeshes()
 			{
 				size_t num = comp_o3dgc_ifs.GetNumFloatAttributes();
 
-				comp_o3dgc_params.SetFloatAttributeQuantBits(num, quant_texcoord);
-				comp_o3dgc_params.SetFloatAttributePredMode(num, prediction_texcoord);
-				comp_o3dgc_ifs.SetNFloatAttribute(num, aim->mNumVertices);// number of elements.
-				comp_o3dgc_ifs.SetFloatAttributeDim(num, aim->mNumUVComponents[num_tc]);// components per element: aiVector3D => x * float
-				comp_o3dgc_ifs.SetFloatAttributeType(num, o3dgc::O3DGC_IFS_FLOAT_ATTRIBUTE_TYPE_TEXCOORD);
-				comp_o3dgc_ifs.SetFloatAttribute(num, (o3dgc::Real* const)&b->GetPointer()[idx_srcdata_tc[num_tc]]);
-				comp_o3dgc_ifs.SetNumFloatAttributes(num + 1);
+				comp_o3dgc_params.SetFloatAttributeQuantBits(static_cast<unsigned long>(num), quant_texcoord);
+				comp_o3dgc_params.SetFloatAttributePredMode(static_cast<unsigned long>(num), prediction_texcoord);
+				comp_o3dgc_ifs.SetNFloatAttribute(static_cast<unsigned long>(num), aim->mNumVertices);// number of elements.
+				comp_o3dgc_ifs.SetFloatAttributeDim(static_cast<unsigned long>(num), aim->mNumUVComponents[num_tc]);// components per element: aiVector3D => x * float
+				comp_o3dgc_ifs.SetFloatAttributeType(static_cast<unsigned long>(num), o3dgc::O3DGC_IFS_FLOAT_ATTRIBUTE_TYPE_TEXCOORD);
+				comp_o3dgc_ifs.SetFloatAttribute(static_cast<unsigned long>(num), (o3dgc::Real* const)&b->GetPointer()[idx_srcdata_tc[num_tc]]);
+				comp_o3dgc_ifs.SetNumFloatAttributes(static_cast<unsigned long>(num + 1));
 			}
 
 			// Coordinates indices
 			comp_o3dgc_ifs.SetNCoordIndex(aim->mNumFaces);
 			comp_o3dgc_ifs.SetCoordIndex((IndicesType* const)&b->GetPointer()[idx_srcdata_ind]);
-			// Prepare to enconding
+			// Prepare to encoding
 			comp_o3dgc_params.SetNumFloatAttributes(comp_o3dgc_ifs.GetNumFloatAttributes());
 			if(mProperties->GetPropertyBool("extensions.Open3DGC.binary", true))
 				comp_o3dgc_params.SetStreamType(o3dgc::O3DGC_STREAM_TYPE_BINARY);
@@ -736,7 +745,7 @@ void glTFExporter::ExportMeshes()
             CopyValue(inverseBindMatricesData[idx_joint], invBindMatrixData[idx_joint]);
         }
 
-        Ref<Accessor> invBindMatrixAccessor = ExportData(*mAsset, skinName, b, inverseBindMatricesData.size(), invBindMatrixData, AttribType::MAT4, AttribType::MAT4, ComponentType_FLOAT);
+        Ref<Accessor> invBindMatrixAccessor = ExportData(*mAsset, skinName, b, static_cast<unsigned int>(inverseBindMatricesData.size()), invBindMatrixData, AttribType::MAT4, AttribType::MAT4, ComponentType_FLOAT);
         if (invBindMatrixAccessor) skinRef->inverseBindMatrices = invBindMatrixAccessor;
 
         // Identity Matrix   =====>  skinRef->bindShapeMatrix
@@ -826,7 +835,7 @@ void glTFExporter::ExportScene()
 void glTFExporter::ExportMetadata()
 {
     glTF::AssetMetadata& asset = mAsset->asset;
-    asset.version = 1;
+    asset.version = "1.0";
 
     char buffer[256];
     ai_snprintf(buffer, 256, "Open Asset Import Library (assimp v%d.%d.%d)",
@@ -835,11 +844,23 @@ void glTFExporter::ExportMetadata()
     asset.generator = buffer;
 }
 
-inline void ExtractAnimationData(Asset& mAsset, std::string& animId, Ref<Animation>& animRef, Ref<Buffer>& buffer, const aiNodeAnim* nodeChannel)
+inline void ExtractAnimationData(Asset& mAsset, std::string& animId, Ref<Animation>& animRef, Ref<Buffer>& buffer, const aiNodeAnim* nodeChannel, float ticksPerSecond)
 {
     // Loop over the data and check to see if it exactly matches an existing buffer.
     //    If yes, then reference the existing corresponding accessor.
     //    Otherwise, add to the buffer and create a new accessor.
+
+    size_t counts[3] = {
+        nodeChannel->mNumPositionKeys,
+        nodeChannel->mNumScalingKeys,
+        nodeChannel->mNumRotationKeys,
+    };
+    size_t numKeyframes = 1;
+    for (int i = 0; i < 3; ++i) {
+        if (counts[i] > numKeyframes) {
+            numKeyframes = counts[i];
+        }
+    }
 
     //-------------------------------------------------------
     // Extract TIME parameter data.
@@ -847,52 +868,67 @@ inline void ExtractAnimationData(Asset& mAsset, std::string& animId, Ref<Animati
     if(nodeChannel->mNumPositionKeys > 0) {
         typedef float TimeType;
         std::vector<TimeType> timeData;
-        timeData.resize(nodeChannel->mNumPositionKeys);
-        for (size_t i = 0; i < nodeChannel->mNumPositionKeys; ++i) {
-            timeData[i] = nodeChannel->mPositionKeys[i].mTime;  // Check if we have to cast type here. e.g. uint16_t()
+        timeData.resize(numKeyframes);
+        for (size_t i = 0; i < numKeyframes; ++i) {
+            size_t frameIndex = i * nodeChannel->mNumPositionKeys / numKeyframes;
+            // mTime is measured in ticks, but GLTF time is measured in seconds, so convert.
+            // Check if we have to cast type here. e.g. uint16_t()
+            timeData[i] = static_cast<float>(nodeChannel->mPositionKeys[frameIndex].mTime / ticksPerSecond);
         }
 
-        Ref<Accessor> timeAccessor = ExportData(mAsset, animId, buffer, nodeChannel->mNumPositionKeys, &timeData[0], AttribType::SCALAR, AttribType::SCALAR, ComponentType_FLOAT);
+        Ref<Accessor> timeAccessor = ExportData(mAsset, animId, buffer, static_cast<unsigned int>(numKeyframes), &timeData[0], AttribType::SCALAR, AttribType::SCALAR, ComponentType_FLOAT);
         if (timeAccessor) animRef->Parameters.TIME = timeAccessor;
     }
 
     //-------------------------------------------------------
     // Extract translation parameter data
     if(nodeChannel->mNumPositionKeys > 0) {
-        C_STRUCT aiVector3D* translationData = new aiVector3D[nodeChannel->mNumPositionKeys];
-        for (size_t i = 0; i < nodeChannel->mNumPositionKeys; ++i) {
-            translationData[i] = nodeChannel->mPositionKeys[i].mValue;
+        C_STRUCT aiVector3D* translationData = new aiVector3D[numKeyframes];
+        for (size_t i = 0; i < numKeyframes; ++i) {
+            size_t frameIndex = i * nodeChannel->mNumPositionKeys / numKeyframes;
+            translationData[i] = nodeChannel->mPositionKeys[frameIndex].mValue;
         }
 
-        Ref<Accessor> tranAccessor = ExportData(mAsset, animId, buffer, nodeChannel->mNumPositionKeys, translationData, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
-        if (tranAccessor) animRef->Parameters.translation = tranAccessor;
+        Ref<Accessor> tranAccessor = ExportData(mAsset, animId, buffer, static_cast<unsigned int>(numKeyframes), translationData, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
+        if ( tranAccessor ) {
+            animRef->Parameters.translation = tranAccessor;
+        }
+        delete[] translationData;
     }
 
     //-------------------------------------------------------
     // Extract scale parameter data
     if(nodeChannel->mNumScalingKeys > 0) {
-        C_STRUCT aiVector3D* scaleData = new aiVector3D[nodeChannel->mNumScalingKeys];
-        for (size_t i = 0; i < nodeChannel->mNumScalingKeys; ++i) {
-            scaleData[i] = nodeChannel->mScalingKeys[i].mValue;
+        C_STRUCT aiVector3D* scaleData = new aiVector3D[numKeyframes];
+        for (size_t i = 0; i < numKeyframes; ++i) {
+            size_t frameIndex = i * nodeChannel->mNumScalingKeys / numKeyframes;
+            scaleData[i] = nodeChannel->mScalingKeys[frameIndex].mValue;
         }
 
-        Ref<Accessor> scaleAccessor = ExportData(mAsset, animId, buffer, nodeChannel->mNumScalingKeys, scaleData, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
-        if (scaleAccessor) animRef->Parameters.scale = scaleAccessor;
+        Ref<Accessor> scaleAccessor = ExportData(mAsset, animId, buffer, static_cast<unsigned int>(numKeyframes), scaleData, AttribType::VEC3, AttribType::VEC3, ComponentType_FLOAT);
+        if ( scaleAccessor ) {
+            animRef->Parameters.scale = scaleAccessor;
+        }
+        delete[] scaleData;
     }
 
     //-------------------------------------------------------
     // Extract rotation parameter data
     if(nodeChannel->mNumRotationKeys > 0) {
-        vec4* rotationData = new vec4[nodeChannel->mNumRotationKeys];
-        for (size_t i = 0; i < nodeChannel->mNumRotationKeys; ++i) {
-            rotationData[i][0] = nodeChannel->mRotationKeys[i].mValue.x;
-            rotationData[i][1] = nodeChannel->mRotationKeys[i].mValue.y;
-            rotationData[i][2] = nodeChannel->mRotationKeys[i].mValue.z;
-            rotationData[i][3] = nodeChannel->mRotationKeys[i].mValue.w;
+        vec4* rotationData = new vec4[numKeyframes];
+        for (size_t i = 0; i < numKeyframes; ++i) {
+            size_t frameIndex = i * nodeChannel->mNumRotationKeys / numKeyframes;
+            rotationData[i][0] = nodeChannel->mRotationKeys[frameIndex].mValue.x;
+            rotationData[i][1] = nodeChannel->mRotationKeys[frameIndex].mValue.y;
+            rotationData[i][2] = nodeChannel->mRotationKeys[frameIndex].mValue.z;
+            rotationData[i][3] = nodeChannel->mRotationKeys[frameIndex].mValue.w;
         }
 
-        Ref<Accessor> rotAccessor = ExportData(mAsset, animId, buffer, nodeChannel->mNumRotationKeys, rotationData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
-        if (rotAccessor) animRef->Parameters.rotation = rotAccessor;
+        Ref<Accessor> rotAccessor = ExportData(mAsset, animId, buffer, static_cast<unsigned int>(numKeyframes), rotationData, AttribType::VEC4, AttribType::VEC4, ComponentType_FLOAT);
+        if ( rotAccessor ) {
+            animRef->Parameters.rotation = rotAccessor;
+        }
+        delete[] rotationData;
     }
 }
 
@@ -918,7 +954,7 @@ void glTFExporter::ExportAnimations()
             Ref<Animation> animRef = mAsset->animations.Create(name);
 
             /******************* Parameters ********************/
-            ExtractAnimationData(*mAsset, name, animRef, bufferRef, nodeChannel);
+            ExtractAnimationData(*mAsset, name, animRef, bufferRef, nodeChannel, static_cast<float>(anim->mTicksPerSecond));
 
             for (unsigned int j = 0; j < 3; ++j) {
                 std::string channelType;

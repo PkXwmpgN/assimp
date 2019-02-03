@@ -3,7 +3,9 @@
 Open Asset Import Library (assimp)
 ---------------------------------------------------------------------------
 
-Copyright (c) 2006-2016, assimp team
+Copyright (c) 2006-2019, assimp team
+
+
 
 All rights reserved.
 
@@ -413,7 +415,7 @@ enum aiTextureFlags
  *    SourceColor * SourceBlend + DestColor * DestBlend
  *  @endcode
  *  where DestColor is the previous color in the framebuffer at this
- *  position and SourceColor is the material colro before the transparency
+ *  position and SourceColor is the material color before the transparency
  *  calculation.<br>
  *  This corresponds to the #AI_MATKEY_BLEND_FUNC property.
 */
@@ -481,7 +483,7 @@ struct aiUVTransform
 
 
 #ifdef __cplusplus
-    aiUVTransform()
+    aiUVTransform() AI_NO_EXCEPT
         :   mTranslation (0.0,0.0)
         ,   mScaling    (1.0,1.0)
         ,   mRotation   (0.0)
@@ -490,7 +492,7 @@ struct aiUVTransform
     }
 #endif
 
-} PACK_STRUCT;
+};
 
 #include "./Compiler/poppack1.h"
 
@@ -605,17 +607,18 @@ struct aiMaterialProperty
 
 #ifdef __cplusplus
 
-    aiMaterialProperty()
-        : mSemantic( 0 )
-        , mIndex( 0 )
-        , mDataLength( 0 )
-        , mType( aiPTI_Float )
-        , mData( NULL )
-    {
+    aiMaterialProperty() AI_NO_EXCEPT
+    : mSemantic( 0 )
+    , mIndex( 0 )
+    , mDataLength( 0 )
+    , mType( aiPTI_Float )
+    , mData(nullptr) {
+        // empty
     }
 
     ~aiMaterialProperty()   {
         delete[] mData;
+        mData = nullptr;
     }
 
 #endif
@@ -648,6 +651,14 @@ public:
 
     aiMaterial();
     ~aiMaterial();
+
+    // -------------------------------------------------------------------
+    /**
+      * @brief  Returns the name of the material.
+      * @return The name of the material.
+      */
+    // -------------------------------------------------------------------
+    aiString GetName();
 
     // -------------------------------------------------------------------
     /** @brief Retrieve an array of Type values with a specific key
@@ -1554,10 +1565,12 @@ C_ENUM aiReturn aiGetMaterialTexture(const C_STRUCT aiMaterial* mat,
     unsigned int* flags                 /*= NULL*/);
 #endif // !#ifdef __cplusplus
 
+
 #ifdef __cplusplus
 }
 
 #include "material.inl"
 
 #endif //!__cplusplus
+
 #endif //!!AI_MATERIAL_H_INC
